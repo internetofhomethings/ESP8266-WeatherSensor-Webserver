@@ -34,6 +34,7 @@ extern "C" {
 #define I2C_SCL 12      // Barometric Pressure Sensor (BMP085)
 #define I2C_SDA 13      // Barometric Pressure Sensor (BMP085)
 #define DHTPIN 14       // Temp/Humidity GPIO pin (DHT11)
+#define LED_IND 16      // LED used for initial code testing (not included in final hardware design)
 
 #define DHTTYPE DHT11   // DHT 11 
 
@@ -63,10 +64,8 @@ OneWire  ds(5);  // on pin 5 for ds18b20
 DHT dht(DHTPIN, DHTTYPE, 15);
 
 void printStatus(char * status, int s) {
-    //Serial.print("Free heap: ");
     Serial.print(system_get_free_heap_size());
     delay(100);
-    //Serial.print(" Time(sec): ");
     Serial.print(" ");
     delay(100);
     Serial.print(millis()/1000);
@@ -291,26 +290,17 @@ void sysloop() {
   if(lc++>2500) {
     lc=0;
     printStatus((char *)" ",state);
-    //ESP.wdtFeed();
     readSensorIsr(); 
-    //digitalWrite(16, lc%2);
-    //ESP.wdtFeed();
-    //printStatus((char *)" Status: Read Sensor Complete",-1);
     busy = false;
     return;   
   }
   // Check if a client has connected
-  //ESP.wdtFeed();
   WiFiClient client = server.available();
   if (!client) {
      busy = false;
      return;
   }
-  //printStatus((char *)" Status: TCP connection detected",-1);
-  //return;
-  //ESP.wdtFeed(); 
-  //printStatus((char *)" Status: TCP connection detected",-1);
-  
+
   // Wait until the client sends some data
   while(!client.available()){
     delay(1);
@@ -326,8 +316,7 @@ void sysloop() {
   }
   complete=false; 
   ESP.wdtFeed(); 
-  //printStatus((char *)" Status: HTTP Data Received",-1);
-  
+
   // Read the first line of the request
   String req = client.readStringUntil('\r');
   client.flush();
@@ -349,7 +338,6 @@ void sysloop() {
     val = 1;
   else if (req.indexOf("/?request=GetSensors") != -1) {
     val = 2;
-    //Serial.println("Get Sensor Values Requested");
   }  
   else {
     Serial.println("invalid request");
@@ -368,8 +356,8 @@ void sysloop() {
   switch (val) {
     case 0:
     case 1:
-      // Set GPIO16 according to the request
-      digitalWrite(16, val);
+      // Set indicator LED according to the request
+      digitalWrite(LED_IND, val);
   
       // Prepare the response for GPIO state
       s += "Content-Type: text/html\r\n\r\n";
@@ -397,7 +385,6 @@ void sysloop() {
       // Send the response to the client
       client.print(s);
       yield();
-      //ESP.wdtFeed(); 
       break;
     default:
       break;
@@ -420,15 +407,13 @@ void sysloop() {
 
 void setup() {
   ESP.wdtEnable();
-  //ESP.wdtDisable();
   Serial.begin(SERBAUD);
   delay(10);
-  //complete=false;
   startWIFI();
   
-  // prepare GPIO16
-  pinMode(16, OUTPUT);
-  digitalWrite(16, 0);
+  // Set Indicator LED as output
+  pinMode(LED_IND, OUTPUT);
+  digitalWrite(LED_IND, 0);
 
   // Setup BMP085 (i2c)
   Wire.pins(I2C_SDA, I2C_SCL);
@@ -441,9 +426,6 @@ void setup() {
   // Print Free Heap
   printStatus((char *)" Status: End of Setup",-1);
   delay(500);
-  
-  //ESP.wdtEnable();
-  //ESP.wdtFeed(); 
 }
 
 void loop() {
