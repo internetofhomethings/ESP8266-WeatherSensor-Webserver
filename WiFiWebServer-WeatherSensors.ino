@@ -1,4 +1,5 @@
 
+
 /*
  *  This sketch based on the example simple HTTP-like server.
  *  The server will perform 3 functions depending on the request
@@ -11,6 +12,7 @@
  */
  
 #include <OneWire.h>
+
 #include <ESP8266WiFi.h>
 #include <Wire.h>
 #include <DHT.h>
@@ -21,9 +23,13 @@
 extern "C" {
 #include "user_interface.h"
 }
+//Server actions
+#define SET_LED_OFF 0
+#define SET_LED_ON  1
+#define Get_SENSORS 2
 
 #define SERBAUD 9600
-#define SVRPORT <ESP8266 server port number>
+#define SVRPORT 9701
 #define ONEJSON 0
 #define FIRSTJSON 1
 #define NEXTJSON 2
@@ -38,12 +44,12 @@ extern "C" {
 
 #define DHTTYPE DHT11   // DHT 11 
 
-const char* ssid = "<nameofyourssid>";
-const char* password = "<yourwifinetworkpassword>";
+const char* ssid = "<wifi-ssid>";
+const char* password = "<wifi-password>";
 //const IPAddress ipadd(192,168,0,132);     //-------these 3 require-------------- 
 //const IPAddress ipgat(192,168,0,1);       //--32 more bytes than const uint8_t--
 //const IPAddress ipsub(255,255,255,0);     //------------------------------------
-const uint8_t ipadd[4] = {192.168.0.xxx};    //Set this to your local IP you wish your ESP8266 to use
+const uint8_t ipadd[4] = {192,168,0,132};
 const uint8_t ipgat[4] = {192,168,0,1};
 const uint8_t ipsub[4] = {255,255,255,0};
 
@@ -64,8 +70,10 @@ OneWire  ds(5);  // on pin 5 for ds18b20
 DHT dht(DHTPIN, DHTTYPE, 15);
 
 void printStatus(char * status, int s) {
+    //Serial.print("Free heap: ");
     Serial.print(system_get_free_heap_size());
     delay(100);
+    //Serial.print(" Time(sec): ");
     Serial.print(" ");
     delay(100);
     Serial.print(millis()/1000);
@@ -261,16 +269,24 @@ void jsonEncode(int pos, String * s, String key, String val) {
         break;
     }
 }
-
+void killclient(WiFiClient client, bool *busy) {
+  lc=0;
+  delay(1);
+  client.flush();
+  client.stop();
+  complete=false;
+  *busy = false;  
+}
 void sysloop() {
   static bool busy=false;
   static int timeout_busy=0;
-  
+  //connect wifi if not connected
   if (WiFi.status() != WL_CONNECTED) {
     delay(1);
     startWIFI();
+    return;
   }
-  
+  //return if busy
   if(busy) {
     delay(1);
     if(timeout_busy++ >10000) {
@@ -284,7 +300,6 @@ void sysloop() {
     busy = true;
     timeout_busy=0;
   }
-  
   delay(1);
   //Read 1 sensor every 2.5 seconds
   if(lc++>2500) {
@@ -299,24 +314,24 @@ void sysloop() {
   if (!client) {
      busy = false;
      return;
-  }
-
+  } 
   // Wait until the client sends some data
-  while(!client.available()){
+  while((!client.available())&&(timeout_busy++<5000)){
     delay(1);
     if(complete==true) {
-      lc=0;
-      delay(1);
-      client.flush();
-      client.stop();
-      complete=false;
-      busy = false;
+      killclient(client, &busy);
       return;
     }
   }
+  //kill client if timeout
+  if(timeout_busy>=5000) {
+    killclient(client, &busy);
+    return;
+  }
+  
   complete=false; 
   ESP.wdtFeed(); 
-
+  
   // Read the first line of the request
   String req = client.readStringUntil('\r');
   client.flush();
@@ -333,11 +348,12 @@ void sysloop() {
     // Match the request
   int val;
   if (req.indexOf("/gpio/0") != -1)
-    val = 0;
+    val = SET_LED_OFF;
   else if (req.indexOf("/gpio/1") != -1)
-    val = 1;
+    val = SET_LED_ON;
   else if (req.indexOf("/?request=GetSensors") != -1) {
-    val = 2;
+    val = Get_SENSORS;
+    //Serial.println("Get Sensor Values Requested");
   }  
   else {
     Serial.println("invalid request");
@@ -354,10 +370,10 @@ void sysloop() {
   ESP.wdtFeed(); 
       
   switch (val) {
-    case 0:
-    case 1:
-      // Set indicator LED according to the request
-      digitalWrite(LED_IND, val);
+    case SET_LED_OFF:
+    case SET_LED_ON:
+      // Set GPIO4 according to the request
+      digitalWrite(LED_IND , val);
   
       // Prepare the response for GPIO state
       s += "Content-Type: text/html\r\n\r\n";
@@ -367,7 +383,7 @@ void sysloop() {
       // Send the response to the client
       client.print(s);
       break;
-    case 2:
+    case Get_SENSORS:
       //Create JSON return string
       s += "Content-Type: application/json\r\n\r\n";
       jsonEncode(FIRSTJSON,&s,"B_Pressure", bprs);
@@ -385,6 +401,7 @@ void sysloop() {
       // Send the response to the client
       client.print(s);
       yield();
+      //ESP.wdtFeed(); 
       break;
     default:
       break;
@@ -409,23 +426,25 @@ void setup() {
   ESP.wdtEnable();
   Serial.begin(SERBAUD);
   delay(10);
+  //complete=false;
   startWIFI();
   
   // Set Indicator LED as output
-  pinMode(LED_IND, OUTPUT);
+  pinMode(LED_IND , OUTPUT);
   digitalWrite(LED_IND, 0);
 
   // Setup BMP085 (i2c)
   Wire.pins(I2C_SDA, I2C_SCL);
   
   if (!bmp.begin()) {
-	Serial.println("Could not find a valid BMP085 sensor, check wiring!");
-	bmp085_present=false;
+    Serial.println("No BMP085 sensor detected!");
+    bmp085_present=false;
   }
 
   // Print Free Heap
   printStatus((char *)" Status: End of Setup",-1);
   delay(500);
+  
 }
 
 void loop() {
