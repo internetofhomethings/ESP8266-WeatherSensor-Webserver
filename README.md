@@ -12,15 +12,6 @@ This sketch implements a webserver that returns a JSON string containing the sen
 
 After many iterations, discovering what worked and what wouldn't function, I came up with the following structure.
 
-Included libraries:
-
-#include <OneWire.h>
-#include <ESP8266WiFi.h>
-#include <Wire.h>
-#include <DHT.h>
-#include <Adafruit_BMP085.h>
-#include <UtilityFunctions.h>
-
 Everything worked "off-the-shelf" except for the BMP085 driver. The problem was that the "pow" function, used to calculate altitude, was not linked properly from the built-in IDE libraries. And if I tried to include "math.h",  which includes the "pow" function, the compiler failed with an out of memory error. I also attempted to implement a recursively called substitute function for the missing "pow"...unsuccessfully. I ended up removing the calls to the altitude function, and the need for the pow function. Not a big loss considering the fact that my sensors are positioned in a fixed location, the altitude will never change. My implementation of the pow function is in the UtilityFunctions.c file in case someone may wish to explore this further.
 
 Structure of the Arduino IDE loop()
