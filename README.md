@@ -1,6 +1,6 @@
 # ESP8266-WeatherSensor-Webserver
 
-ESP8266 Webserver for Weather Sensors
+<center><strong><large-font>ESP8266 Webserver for Weather Sensors</large-font></strong></center>
 
 Here is what I came up with when attempting to port my Home weather sensors from a Spark Core MPU to an ESP8266. I used the Arduino IDE for code development. While the sketch framework can easily be expanded to support other sensor types, the   sensors supported with this code include:
 
